@@ -1,0 +1,54 @@
+# serverless.yml
+ 
+service: cloud-resume-challenge
+
+frameworkVersion: '3'
+
+provider:
+  name: aws
+  endpointType: REGIONAL
+  region: us-east-1
+  stage: dev
+  runtime: python3.9
+  iam:
+    role:
+      name: crc-${sls:stage}-role
+      statements:
+       
+        - Effect: Allow
+          Action: 
+            - 'dynamodb:UpdateItem'
+          Resource: 
+            - "Fn::GetAtt": [myDynamoDBTable, Arn]
+  environment:
+    ENV_MYTABLE: counterTable
+     
+functions:
+  get-visitors:
+    handler: lambda/handler.lambda_handler
+    events:
+      - http:
+          path: /counter
+          method: get
+          cors: true
+          integration: lambda
+
+ 
+resources:
+  Resources:
+  
+    myDynamoDBTable:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: ${self:provider.environment.ENV_MYTABLE}
+        AttributeDefinitions:
+          - AttributeName: id
+            AttributeType: S
+        KeySchema: 
+          - AttributeName: id
+            KeyType: HASH
+        ProvisionedThroughput:
+          ReadCapacityUnits: 1
+          WriteCapacityUnits: 1
+          
+                    

@@ -1,20 +1,35 @@
-# serverless.yml
- 
+# The name of the project
 service: cloud-resume-challenge
-
 frameworkVersion: '3'
 
+custom:
+  siteName: lpastor-website-bucket
+  s3Sync:
+     # Disable sync when sls deploy and sls remove
+     # nosync: true
+    - bucketName: ${self:custom.siteName}
+      localDir: static
+  customDomain:
+    domainName: luispastor.dev
+    certificateName: 'luispastor.dev'
+    createRoute53Record: true
+  customCertificate:
+    certificateName: 'luispastor.dev'
+    hostedZoneName: 'luispastor.dev.' # don't forget the dot on the end - is required by Route53
+  hostedZoneId: Z2FDTNDATAQYW2 # For CloudFront distributions, the value is always Z2FDTNDATAQYW2
+
+# Configuration for AWS
 provider:
   name: aws
   endpointType: REGIONAL
-  region: us-east-1
-  stage: dev
+  region: ${opt:reginon, 'us-east-1'}
+  # This enables us to use the default stage definition, but override it from the command line
+  stage: ${opt:stage, 'dev'}
   runtime: python3.9
   iam:
     role:
       name: crc-${sls:stage}-role
-      statements:
-       
+      statements:       
         - Effect: Allow
           Action: 
             - 'dynamodb:UpdateItem'
@@ -24,6 +39,7 @@ provider:
     ENV_MYTABLE: counterTable
      
 functions:
+  # Lambda function with API Gateway trigger
   get-visitors:
     handler: lambda/handler.lambda_handler
     events:
@@ -33,10 +49,9 @@ functions:
           cors: true
           integration: lambda
 
- 
 resources:
   Resources:
-  
+    # DynamoDB Table with visit counter
     myDynamoDBTable:
       Type: AWS::DynamoDB::Table
       Properties:
@@ -50,5 +65,119 @@ resources:
         ProvisionedThroughput:
           ReadCapacityUnits: 1
           WriteCapacityUnits: 1
+
+    WebsiteS3Bucket:
+      Type: AWS::S3::Bucket
+      Properties:
+        PublicAccessBlockConfiguration:
+          BlockPublicAcls: true
+        BucketName: ${self:custom.siteName}
+        WebsiteConfiguration:
+          IndexDocument: index.html
+          ErrorDocument: error.html
+        
+    CloudFrontOriginAccessIdentity:
+      Type: 'AWS::CloudFront::CloudFrontOriginAccessIdentity'
+      Properties:
+        CloudFrontOriginAccessIdentityConfig:
+          Comment: Access Identity for cdn
+
+    # Set-up a policy on the bucket so it can be used as a website
+    WebsiteBucketPolicy:
+      Type: AWS::S3::BucketPolicy
+      Properties:
+        PolicyDocument:
+          Id:
+            Fn::Join:
+              - ""
+              - - ${self:service}
+                - BucketPolicy
+          Statement:
+            - Sid: CloudFrontForGetBucketObjects
+              Effect: Allow
+              Principal:
+                CanonicalUser:
+                  Fn::GetAtt:
+                    - CloudFrontOriginAccessIdentity
+                    - S3CanonicalUserId
+              Action: 's3:GetObject'
+              Resource:
+                Fn::Join:
+                  - ''
+                  -
+                    - 'arn:aws:s3:::'
+                    - Ref: WebsiteS3Bucket
+                    - /*
+        Bucket:
+          Ref: WebsiteS3Bucket
+    # Configure CloudFront to get all content from S3
+    WebsiteCloudFrontDistribution:
+      Type: 'AWS::CloudFront::Distribution'
+      Properties:
+        DistributionConfig:
+          Aliases:
+            - ${self:custom.customDomain.domainName}
+            - www.${self:custom.customDomain.domainName}
+          CustomErrorResponses:
+            - ErrorCode: '404'
+              ResponsePagePath: "/error.html"
+              ResponseCode: '200'
+              ErrorCachingMinTTL: '30'
+          DefaultCacheBehavior:
+            Compress: true
+            ForwardedValues:
+              QueryString: false
+              Cookies:
+                Forward: all
+            SmoothStreaming: false
+            TargetOriginId: defaultOrigin
+            ViewerProtocolPolicy: redirect-to-https
+          DefaultRootObject: index.html
+          Enabled: true
+          Origins:
+            - DomainName:
+                Fn::GetAtt:
+                  - WebsiteS3Bucket
+                  - DomainName
+              Id: defaultOrigin
+              S3OriginConfig:
+                OriginAccessIdentity:
+                  Fn::Join:
+                    - "/"
+                    - - origin-access-identity
+                      - cloudfront
+                      - Ref: CloudFrontOriginAccessIdentity
+          PriceClass: PriceClass_All
+          ViewerCertificate:
+            AcmCertificateArn: ${certificate(${self:custom.customCertificate.certificateName}):CertificateArn}
+            SslSupportMethod: sni-only
+    # DNS Record for the domain
+    WebsiteDNSRecord:
+      Type: "AWS::Route53::RecordSet"
+      Properties:
+        AliasTarget:
+          DNSName: !GetAtt [WebsiteCloudFrontDistribution, DomainName]
+          HostedZoneId: ${self:custom.hostedZoneId}
+        HostedZoneName: ${self:custom.customCertificate.hostedZoneName}
+        Name: ${self:custom.customDomain.domainName}
+        Type: 'A'
+    # DNS Record for www.domain
+    WebsiteWWWDNSRecord:
+      Type: "AWS::Route53::RecordSet"
+      Properties:
+        AliasTarget:
+          DNSName: !GetAtt [WebsiteCloudFrontDistribution, DomainName]
+          HostedZoneId: ${self:custom.hostedZoneId}
+        HostedZoneName: ${self:custom.customCertificate.hostedZoneName}
+        Name: www.${self:custom.customDomain.domainName}
+        Type: 'A'
+
+  Outputs:
+    WebsiteCloudFrontDistributionOutput:
+      Value:
+        'Fn::GetAtt': [WebsiteCloudFrontDistribution, DomainName]
           
-                    
+# Plugins for additional Serverless functionality
+plugins:
+  - serverless-s3-sync
+  - serverless-certificate-creator

@@ -1,0 +1,4 @@
+Outputs:
+  WebsiteCloudFrontDistributionOutput:
+    Value:
+      'Fn::GetAtt': [WebsiteCloudFrontDistribution, DomainName]

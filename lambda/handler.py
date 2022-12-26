@@ -2,12 +2,12 @@ import boto3
 import os
 
 client = boto3.client('dynamodb')
-MY_TABLE = os.environ['ENV_MYTABLE']
+MY_DYNAMO_TABLE = os.environ['ENV_MYTABLE']
 
 def lambda_handler(event, context):
     
     response = client.update_item(
-        TableName = MY_TABLE,
+        TableName = MY_DYNAMO_TABLE,
         Key = {
             'id': {'S': 'my_website'}
         },

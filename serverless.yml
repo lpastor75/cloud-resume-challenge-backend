@@ -4,11 +4,6 @@ frameworkVersion: '3'
 
 custom:
   siteName: lpastor-website-bucket
-  s3Sync:
-     # Disable sync when sls deploy and sls remove
-     # nosync: true
-    - bucketName: ${self:custom.siteName}
-      localDir: static
   customDomain:
     domainName: luispastor.dev
     certificateName: 'luispastor.dev'
@@ -55,5 +50,4 @@ resources:
           
 # Plugins for additional Serverless functionality
 plugins:
-  - serverless-s3-sync
   - serverless-certificate-creator

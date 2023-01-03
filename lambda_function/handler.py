@@ -1,8 +1,8 @@
 import boto3
 import os
 
-client = boto3.client('dynamodb')
-MY_DYNAMO_TABLE = os.environ['ENV_MYTABLE']
+client = boto3.client('dynamodb', region_name='us-east-1')
+MY_DYNAMO_TABLE = 'counterTable'
 
 def lambda_handler(event, context):
     

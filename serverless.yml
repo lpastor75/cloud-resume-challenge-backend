@@ -36,7 +36,7 @@ provider:
 functions:
   # Lambda function with API Gateway trigger
   get-visitors:
-    handler: lambda/handler.lambda_handler
+    handler: lambda_function/handler.lambda_handler
     events:
       - http:
           path: /counter
